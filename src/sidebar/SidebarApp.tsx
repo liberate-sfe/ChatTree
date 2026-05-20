@@ -1,9 +1,12 @@
 import {
   BookOpen,
+  Check,
   ChevronLeft,
   ChevronRight,
   Copy,
   FileText,
+  FileJson,
+  GitBranch,
   Highlighter,
   MessageSquarePlus,
   NotebookTabs,
@@ -11,12 +14,16 @@ import {
   PinOff,
   Settings,
   Sparkles,
-  Star
+  Star,
+  Tags,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ChatTreeNode, HighlightColor, Note, ProviderSite } from "../shared/schema";
 import { RUNTIME_MESSAGES, type RuntimeResponse, type GeneratedSummary } from "../shared/messages";
+import { exportTreeAsJson, exportTreeAsMarkdown } from "../shared/export";
 import { createTextAnchor, getCurrentSelectionRange } from "../content/selectionAnchors";
+import { reapplyHighlights } from "../content/highlightRenderer";
 import { useChatTreeStore } from "./store";
 
 interface SidebarAppProps {
@@ -135,6 +142,8 @@ function TreeTab({ onJumpToMessage }: { onJumpToMessage: (messageId: string) => 
         </section>
       )}
 
+      <BranchSuggestions />
+
       {root && <TreeNodeView node={root} depth={0} onJumpToMessage={onJumpToMessage} />}
     </div>
   );
@@ -153,6 +162,7 @@ function TreeNodeView({
   const selectNode = useChatTreeStore((state) => state.selectNode);
   const selectedNodeId = useChatTreeStore((state) => state.selectedNodeId);
   const togglePin = useChatTreeStore((state) => state.togglePin);
+  const toggleBranchPoint = useChatTreeStore((state) => state.toggleBranchPoint);
   const addNote = useChatTreeStore((state) => state.addNote);
   const childNodes = node.childIds.map((childId) => envelope.nodes[childId]).filter(Boolean);
 
@@ -200,6 +210,17 @@ function TreeNodeView({
             <button type="button" aria-label="Add message note" className="grid h-7 w-7 place-items-center rounded-md hover:bg-chattree-panel" onClick={addMessageNote}>
               <MessageSquarePlus size={14} />
             </button>
+            <button
+              type="button"
+              aria-label="Mark branch point"
+              className={[
+                "grid h-7 w-7 place-items-center rounded-md hover:bg-chattree-panel",
+                node.isBranchPoint ? "text-chattree-branch" : ""
+              ].join(" ")}
+              onClick={() => toggleBranchPoint(node.id)}
+            >
+              <GitBranch size={14} />
+            </button>
             <button type="button" aria-label="Pin node" className="grid h-7 w-7 place-items-center rounded-md hover:bg-chattree-panel" onClick={() => togglePin(node.id)}>
               {node.isPinned ? <PinOff size={14} /> : <Pin size={14} />}
             </button>
@@ -213,12 +234,58 @@ function TreeNodeView({
   );
 }
 
+function BranchSuggestions() {
+  const envelope = useChatTreeStore((state) => state.envelope);
+  const acceptBranchSuggestion = useChatTreeStore((state) => state.acceptBranchSuggestion);
+  const rejectBranchSuggestion = useChatTreeStore((state) => state.rejectBranchSuggestion);
+  const suggestions = envelope.branchSuggestions.filter((suggestion) => suggestion.accepted === null).slice(0, 4);
+
+  if (suggestions.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="mb-3 rounded-md border border-chattree-line bg-white p-2">
+      <div className="mb-2 flex items-center gap-1 text-xs font-semibold text-chattree-muted">
+        <GitBranch size={13} />
+        <span>Split Suggestions</span>
+      </div>
+      <div className="space-y-2">
+        {suggestions.map((suggestion) => (
+          <article key={suggestion.id} className="rounded-md bg-chattree-panel p-2 text-xs leading-4">
+            <p className="mb-2">{suggestion.reason}</p>
+            <div className="flex gap-1">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md bg-chattree-accent px-2 py-1 font-semibold text-white"
+                onClick={() => acceptBranchSuggestion(suggestion.id)}
+              >
+                <Check size={12} />
+                Accept
+              </button>
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 rounded-md border border-chattree-line px-2 py-1 font-semibold"
+                onClick={() => rejectBranchSuggestion(suggestion.id)}
+              >
+                <X size={12} />
+                Reject
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function NotesTab({ onJumpToMessage }: { onJumpToMessage: (messageId: string) => void }) {
   const envelope = useChatTreeStore((state) => state.envelope);
   const selectedTagId = useChatTreeStore((state) => state.selectedTagId);
   const setSelectedTag = useChatTreeStore((state) => state.setSelectedTag);
   const addNote = useChatTreeStore((state) => state.addNote);
   const addTag = useChatTreeStore((state) => state.addTag);
+  const tagEntity = useChatTreeStore((state) => state.tagEntity);
   const tags = Object.values(envelope.tags);
 
   const notesAndHighlights = useMemo(() => {
@@ -321,6 +388,24 @@ function NotesTab({ onJumpToMessage }: { onJumpToMessage: (messageId: string) =>
               <article key={`${item.type}:${item.id}`} className="rounded-md bg-chattree-panel p-2 text-xs leading-4">
                 {item.quote && <blockquote className="mb-1 border-l-2 border-chattree-accent pl-2 text-chattree-muted">{item.quote}</blockquote>}
                 <div>{item.body}</div>
+                <div className="mt-2 flex flex-wrap items-center gap-1">
+                  <Tags size={12} className="text-chattree-muted" />
+                  {getTagLabels(envelope, item.type, item.id).map((label) => (
+                    <span key={label} className="rounded-sm bg-white px-1.5 py-0.5 text-[10px] text-chattree-muted">
+                      {label}
+                    </span>
+                  ))}
+                  {tags.map((tag) => (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      className="rounded-sm border border-chattree-line bg-white px-1.5 py-0.5 text-[10px]"
+                      onClick={() => tagEntity({ tagId: tag.id, entityType: item.type, entityId: item.id })}
+                    >
+                      +{tag.label}
+                    </button>
+                  ))}
+                </div>
                 <time className="mt-1 block text-[10px] text-chattree-muted">{new Date(item.createdAt).toLocaleString()}</time>
               </article>
             ))}
@@ -333,6 +418,12 @@ function NotesTab({ onJumpToMessage }: { onJumpToMessage: (messageId: string) =>
 
 function SettingsTab() {
   const persist = useChatTreeStore((state) => state.persist);
+  const envelope = useChatTreeStore((state) => state.envelope);
+  const copyExport = async (format: "json" | "markdown") => {
+    const text = format === "json" ? exportTreeAsJson(envelope) : exportTreeAsMarkdown(envelope);
+    await navigator.clipboard.writeText(text);
+  };
+
   return (
     <div className="space-y-3 px-3 py-3 text-sm">
       <section className="rounded-md border border-chattree-line bg-white p-3">
@@ -351,12 +442,27 @@ function SettingsTab() {
           Save Now
         </button>
       </section>
+      <section className="rounded-md border border-chattree-line bg-white p-3">
+        <div className="font-semibold">Export</div>
+        <p className="mt-1 text-xs leading-4 text-chattree-muted">Copy the current tree, summaries, notes, highlights, and tags.</p>
+        <div className="mt-3 flex gap-2">
+          <button type="button" className="inline-flex items-center gap-1 rounded-md border border-chattree-line px-3 py-2 text-xs font-semibold" onClick={() => void copyExport("json")}>
+            <FileJson size={14} />
+            JSON
+          </button>
+          <button type="button" className="inline-flex items-center gap-1 rounded-md border border-chattree-line px-3 py-2 text-xs font-semibold" onClick={() => void copyExport("markdown")}>
+            <FileText size={14} />
+            Markdown
+          </button>
+        </div>
+      </section>
     </div>
   );
 }
 
 function ManualSummaryButton() {
   const envelope = useChatTreeStore((state) => state.envelope);
+  const applyGeneratedSummary = useChatTreeStore((state) => state.applyGeneratedSummary);
   const [busy, setBusy] = useState(false);
 
   const requestSummary = async () => {
@@ -373,6 +479,8 @@ function ManualSummaryButton() {
       }) as RuntimeResponse<GeneratedSummary>;
       if (!response.ok) {
         window.alert(response.error ?? "Summary failed");
+      } else if (response.data) {
+        applyGeneratedSummary(response.data, envelope.tree.rootNodeId, "overview");
       }
     } finally {
       setBusy(false);
@@ -394,6 +502,7 @@ function ManualSummaryButton() {
 
 function SelectionToolbar({ getMessageElement }: { getMessageElement: (messageId: string) => HTMLElement | null }) {
   const envelope = useChatTreeStore((state) => state.envelope);
+  const selectedTagId = useChatTreeStore((state) => state.selectedTagId);
   const addHighlight = useChatTreeStore((state) => state.addHighlight);
   const addNote = useChatTreeStore((state) => state.addNote);
   const [selectionState, setSelectionState] = useState<{ rect: DOMRect; messageId: string; range: Range; quote: string } | null>(null);
@@ -443,7 +552,8 @@ function SelectionToolbar({ getMessageElement }: { getMessageElement: (messageId
       selectionRange: createTextAnchor(messageElement, selectionState.range),
       color,
       quote: selectionState.quote
-    });
+    }, selectedTagId ? [selectedTagId] : []);
+    window.setTimeout(() => reapplyHighlights(Object.values(useChatTreeStore.getState().envelope.highlights), getMessageElement), 0);
   };
 
   const createSelectionNote = () => {
@@ -459,7 +569,7 @@ function SelectionToolbar({ getMessageElement }: { getMessageElement: (messageId
       selectionRange: createTextAnchor(messageElement, selectionState.range),
       quote: selectionState.quote,
       body: noteDraft.trim()
-    });
+    }, selectedTagId ? [selectedTagId] : []);
     setNoteDraft("");
   };
 
@@ -527,4 +637,15 @@ function tagButtonClass(active: boolean): string {
     "rounded-md border px-2 py-1 text-xs",
     active ? "border-chattree-accent bg-chattree-accent text-white" : "border-chattree-line bg-white text-chattree-muted"
   ].join(" ");
+}
+
+function getTagLabels(
+  envelope: ReturnType<typeof useChatTreeStore.getState>["envelope"],
+  entityType: "note" | "highlight" | "node",
+  entityId: string
+): string[] {
+  return envelope.taggedEntities
+    .filter((entry) => entry.entityType === entityType && entry.entityId === entityId)
+    .map((entry) => envelope.tags[entry.tagId]?.label)
+    .filter((label): label is string => Boolean(label));
 }

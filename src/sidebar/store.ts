@@ -1,6 +1,24 @@
 import { create } from "zustand";
-import { CHAT_TREE_SCHEMA_VERSION, type ConversationEnvelope, type ExtractedMessage, type Highlight, type HighlightColor, type Note, type ProviderSite, type Tag } from "../shared/schema";
-import { saveConversationEnvelope } from "../shared/storage";
+import {
+  applyBranchSuggestion,
+  buildEnvelopeFromMessages,
+  createConversationId,
+  ensureDefaultTags,
+  rejectBranchSuggestion,
+  titleFromContent
+} from "../shared/conversation";
+import type {
+  ConversationEnvelope,
+  ExtractedMessage,
+  Highlight,
+  Note,
+  ProviderSite,
+  Summary,
+  Tag,
+  TaggedEntity
+} from "../shared/schema";
+import type { GeneratedSummary } from "../shared/messages";
+import { loadConversationEnvelope, saveConversationEnvelope } from "../shared/storage";
 import { mockEnvelope } from "./mockData";
 
 interface ChatTreeState {
@@ -9,14 +27,21 @@ interface ChatTreeState {
   activeTab: "tree" | "notes" | "settings";
   selectedNodeId: string | null;
   selectedTagId: string | null;
+  hydratedConversationId: string | null;
+  hydrateConversation: (provider: ProviderSite, url: string) => Promise<void>;
   ingestMessages: (provider: ProviderSite, url: string, messages: ExtractedMessage[]) => void;
   toggleSidebar: () => void;
   setActiveTab: (tab: ChatTreeState["activeTab"]) => void;
   selectNode: (nodeId: string) => void;
   togglePin: (nodeId: string) => void;
-  addHighlight: (highlight: Omit<Highlight, "id" | "createdAt" | "updatedAt">) => void;
-  addNote: (note: Omit<Note, "id" | "createdAt" | "updatedAt">) => void;
+  toggleBranchPoint: (nodeId: string) => void;
+  acceptBranchSuggestion: (suggestionId: string) => void;
+  rejectBranchSuggestion: (suggestionId: string) => void;
+  addHighlight: (highlight: Omit<Highlight, "id" | "createdAt" | "updatedAt">, tagIds?: string[]) => void;
+  addNote: (note: Omit<Note, "id" | "createdAt" | "updatedAt">, tagIds?: string[]) => void;
   addTag: (label: string) => void;
+  tagEntity: (entity: Omit<TaggedEntity, "id" | "createdAt" | "conversationId">) => void;
+  applyGeneratedSummary: (summary: GeneratedSummary, nodeId: string | null, kind: Summary["kind"]) => void;
   setSelectedTag: (tagId: string | null) => void;
   persist: () => Promise<void>;
 }
@@ -27,96 +52,38 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
   activeTab: "tree",
   selectedNodeId: "root",
   selectedTagId: null,
+  hydratedConversationId: null,
+
+  async hydrateConversation(provider, url) {
+    const conversationId = createConversationId(provider, url);
+    const persisted = await loadConversationEnvelope(conversationId);
+    if (persisted) {
+      set({
+        envelope: {
+          ...persisted,
+          tags: ensureDefaultTags(persisted.tags, conversationId)
+        },
+        selectedNodeId: persisted.tree.rootNodeId,
+        hydratedConversationId: conversationId
+      });
+      return;
+    }
+
+    set({ hydratedConversationId: conversationId });
+  },
 
   ingestMessages(provider, url, messages) {
     if (messages.length === 0) {
       return;
     }
 
-    const now = new Date().toISOString();
     const conversationId = createConversationId(provider, url);
-    const rootId = `${conversationId}:root`;
-    const userMessages = messages.filter((message) => message.role === "user");
-
     set((state) => {
-      const nodes = {
-        [rootId]: {
-          id: rootId,
-          conversationId,
-          messageId: userMessages[0]?.id ?? messages[0].id,
-          parentId: null,
-          role: "user" as const,
-          title: "Conversation",
-          contentPreview: "Auto-detected conversation root. Use branch suggestions to split paper, language, and mechanism threads.",
-          summaryId: null,
-          childIds: userMessages.map((message) => `node:${message.id}`),
-          assistantReplyIds: messages.filter((message) => message.role === "assistant").map((message) => message.id),
-          isBranchPoint: false,
-          branchSourceReplyId: null,
-          isPinned: false,
-          collapsed: false,
-          ordinal: 0,
-          createdAt: now,
-          updatedAt: now
-        },
-        ...Object.fromEntries(
-          userMessages.map((message, index) => [
-            `node:${message.id}`,
-            {
-              id: `node:${message.id}`,
-              conversationId,
-              messageId: message.id,
-              parentId: rootId,
-              role: message.role,
-              title: titleFromContent(message.content),
-              contentPreview: message.content.slice(0, 140),
-              summaryId: null,
-              childIds: [],
-              assistantReplyIds: messages[index + 1]?.role === "assistant" ? [messages[index + 1].id] : [],
-              isBranchPoint: false,
-              branchSourceReplyId: null,
-              isPinned: state.envelope.nodes[`node:${message.id}`]?.isPinned ?? false,
-              collapsed: false,
-              ordinal: message.ordinal,
-              createdAt: now,
-              updatedAt: now
-            }
-          ])
-        )
-      };
-
+      const previous = state.envelope.conversation.id === conversationId ? state.envelope : null;
+      const envelope = buildEnvelopeFromMessages(provider, url, document.title, messages, previous);
       return {
-        envelope: {
-          ...state.envelope,
-          conversation: {
-            id: conversationId,
-            provider,
-            url,
-            title: document.title || "ChatTree conversation",
-            treeId: `${conversationId}:tree`,
-            messageIds: messages.map((message) => message.id),
-            importSource: null,
-            storageBackend: "indexeddb",
-            createdAt: state.envelope.conversation.id === conversationId ? state.envelope.conversation.createdAt : now,
-            updatedAt: now
-          },
-          tree: {
-            id: `${conversationId}:tree`,
-            conversationId,
-            rootNodeId: rootId,
-            nodeIds: Object.keys(nodes),
-            overviewSummaryId: state.envelope.tree.overviewSummaryId,
-            createdAt: now,
-            updatedAt: now,
-            schemaVersion: CHAT_TREE_SCHEMA_VERSION
-          },
-          nodes,
-          messages: Object.fromEntries(messages.map((message) => [message.id, { ...message, conversationId }])),
-          highlights: filterByConversation(state.envelope.highlights, conversationId),
-          notes: filterByConversation(state.envelope.notes, conversationId),
-          tags: ensureDefaultTags(filterByConversation(state.envelope.tags, conversationId), conversationId),
-          taggedEntities: state.envelope.taggedEntities.filter((entry) => entry.conversationId === conversationId)
-        }
+        envelope,
+        selectedNodeId: previous?.tree.rootNodeId ?? envelope.tree.rootNodeId
       };
     });
   },
@@ -147,9 +114,37 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
         }
       }
     }));
+    void get().persist();
   },
 
-  addHighlight(highlightInput) {
+  toggleBranchPoint(nodeId) {
+    set((state) => ({
+      envelope: {
+        ...state.envelope,
+        nodes: {
+          ...state.envelope.nodes,
+          [nodeId]: {
+            ...state.envelope.nodes[nodeId],
+            isBranchPoint: !state.envelope.nodes[nodeId].isBranchPoint,
+            updatedAt: new Date().toISOString()
+          }
+        }
+      }
+    }));
+    void get().persist();
+  },
+
+  acceptBranchSuggestion(suggestionId) {
+    set((state) => ({ envelope: applyBranchSuggestion(state.envelope, suggestionId) }));
+    void get().persist();
+  },
+
+  rejectBranchSuggestion(suggestionId) {
+    set((state) => ({ envelope: rejectBranchSuggestion(state.envelope, suggestionId) }));
+    void get().persist();
+  },
+
+  addHighlight(highlightInput, tagIds = []) {
     const id = `highlight:${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     set((state) => ({
@@ -158,13 +153,18 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
         highlights: {
           ...state.envelope.highlights,
           [id]: { ...highlightInput, id, createdAt: now, updatedAt: now }
-        }
+        },
+        taggedEntities: [
+          ...state.envelope.taggedEntities,
+          ...tagIds.map((tagId) => makeTaggedEntity(state.envelope.conversation.id, tagId, "highlight", id, now))
+        ]
       },
       activeTab: "notes"
     }));
+    void get().persist();
   },
 
-  addNote(noteInput) {
+  addNote(noteInput, tagIds = []) {
     const id = `note:${crypto.randomUUID()}`;
     const now = new Date().toISOString();
     set((state) => ({
@@ -173,10 +173,15 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
         notes: {
           ...state.envelope.notes,
           [id]: { ...noteInput, id, createdAt: now, updatedAt: now }
-        }
+        },
+        taggedEntities: [
+          ...state.envelope.taggedEntities,
+          ...tagIds.map((tagId) => makeTaggedEntity(state.envelope.conversation.id, tagId, "note", id, now))
+        ]
       },
       activeTab: "notes"
     }));
+    void get().persist();
   },
 
   addTag(label) {
@@ -199,11 +204,83 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
             color: "pink",
             createdAt: now,
             updatedAt: now
-          }
+          } satisfies Tag
         }
       },
       selectedTagId: id
     }));
+    void get().persist();
+  },
+
+  tagEntity(entity) {
+    const now = new Date().toISOString();
+    set((state) => {
+      const duplicate = state.envelope.taggedEntities.some(
+        (entry) => entry.tagId === entity.tagId && entry.entityType === entity.entityType && entry.entityId === entity.entityId
+      );
+      if (duplicate) {
+        return state;
+      }
+
+      return {
+        envelope: {
+          ...state.envelope,
+          taggedEntities: [
+            ...state.envelope.taggedEntities,
+            makeTaggedEntity(state.envelope.conversation.id, entity.tagId, entity.entityType, entity.entityId, now)
+          ]
+        }
+      };
+    });
+    void get().persist();
+  },
+
+  applyGeneratedSummary(summary, nodeId, kind) {
+    const summaryId = `summary:${kind}:${nodeId ?? "conversation"}`;
+    const now = new Date().toISOString();
+    set((state) => {
+      const targetNodeId = nodeId ?? state.envelope.tree.rootNodeId;
+      const targetNode = state.envelope.nodes[targetNodeId];
+      return {
+        envelope: {
+          ...state.envelope,
+          summaries: {
+            ...state.envelope.summaries,
+            [summaryId]: {
+              id: summaryId,
+              conversationId: state.envelope.conversation.id,
+              nodeId,
+              kind,
+              title: titleFromContent(summary.title),
+              body: summary.summary,
+              sourceMessageIds: Object.keys(state.envelope.messages),
+              provider: summary.provider,
+              model: summary.model,
+              status: "ready",
+              generatedAt: now,
+              error: null
+            }
+          },
+          tree: {
+            ...state.envelope.tree,
+            overviewSummaryId: kind === "overview" ? summaryId : state.envelope.tree.overviewSummaryId,
+            updatedAt: now
+          },
+          nodes: targetNode
+            ? {
+                ...state.envelope.nodes,
+                [targetNodeId]: {
+                  ...targetNode,
+                  title: titleFromContent(summary.title),
+                  summaryId,
+                  updatedAt: now
+                }
+              }
+            : state.envelope.nodes
+        }
+      };
+    });
+    void get().persist();
   },
 
   setSelectedTag(selectedTagId) {
@@ -215,43 +292,19 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
   }
 }));
 
-function createConversationId(provider: ProviderSite, url: string): string {
-  const idFromUrl = new URL(url).pathname.split("/").filter(Boolean).at(-1);
-  return `${provider}:${idFromUrl || "active"}`;
-}
-
-function titleFromContent(content: string): string {
-  const cleaned = content.replace(/\s+/g, " ").trim();
-  return cleaned.length <= 15 ? cleaned : `${cleaned.slice(0, 14)}…`;
-}
-
-function filterByConversation<T extends { conversationId: string }>(items: Record<string, T>, conversationId: string): Record<string, T> {
-  return Object.fromEntries(Object.entries(items).filter(([, item]) => item.conversationId === conversationId));
-}
-
-function ensureDefaultTags(tags: Record<string, Tag>, conversationId: string): Record<string, Tag> {
-  if (Object.keys(tags).length > 0) {
-    return tags;
-  }
-
-  const now = new Date().toISOString();
-  const defaults: Array<[string, string, HighlightColor]> = [
-    ["vocabulary", "vocabulary", "yellow"],
-    ["grammar", "grammar", "green"],
-    ["mechanism", "mechanism", "blue"]
-  ];
-
-  return Object.fromEntries(
-    defaults.map(([id, label, color]) => [
-      id,
-      {
-        id,
-        conversationId,
-        label,
-        color,
-        createdAt: now,
-        updatedAt: now
-      }
-    ])
-  );
+function makeTaggedEntity(
+  conversationId: string,
+  tagId: string,
+  entityType: TaggedEntity["entityType"],
+  entityId: string,
+  createdAt: string
+): TaggedEntity {
+  return {
+    id: `tagged:${crypto.randomUUID()}`,
+    conversationId,
+    tagId,
+    entityType,
+    entityId,
+    createdAt
+  };
 }

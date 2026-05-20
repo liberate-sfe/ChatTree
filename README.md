@@ -37,11 +37,24 @@ API keys are encrypted with AES-GCM and stored in `chrome.storage.local`. ChatTr
 
 - Branching tree sidebar with jump-to-message and pinned nodes.
 - MutationObserver-based DOM extraction with fallback selectors for all supported sites.
+- Per-site DOM adapter tests for ChatGPT and Gemini-style markup.
+- IndexedDB restore flow that reloads saved tree, notes, highlights, tags, and summaries for the active conversation.
+- Retroactive branch split suggestions with accept/reject controls.
 - LLM-generated short titles and 3-5 sentence summaries through the user's own API key.
+- Summary responses are written back to the root or selected node.
 - Notes and highlights with robust text anchoring based on selected text, offsets, and nearby context.
 - Notes tab grouped by message and filterable by tags such as `vocabulary`, `grammar`, and `mechanism`.
 - JSON and Markdown export helpers with summaries, notes, highlights, and tags inlined.
 - Import parser skeleton for ChatGPT `conversations.json` and Claude JSON exports, with topic-shift branch suggestions.
+- Extension popup, options page key deletion, and simple extension icons.
+
+## Development
+
+```bash
+pnpm install
+pnpm test
+pnpm build
+```
 
 ## Project Structure
 

@@ -25,18 +25,7 @@ export function createTextAnchor(container: HTMLElement, range: Range): TextAnch
 
 export function findAnchorRange(container: HTMLElement, anchor: TextAnchor): Range | null {
   const text = getVisibleText(container);
-  let start = text.indexOf(anchor.exact, Math.max(0, anchor.startOffset - 80));
-
-  if (start === -1) {
-    start = text.indexOf(`${anchor.prefix}${anchor.exact}${anchor.suffix}`);
-    if (start !== -1) {
-      start += anchor.prefix.length;
-    }
-  }
-
-  if (start === -1) {
-    start = text.indexOf(anchor.exact);
-  }
+  const start = findBestAnchorStart(text, anchor);
 
   if (start === -1) {
     return null;
@@ -54,7 +43,33 @@ export function getCurrentSelectionRange(): Range | null {
 }
 
 function getVisibleText(container: HTMLElement): string {
-  return container.innerText || container.textContent || "";
+  // textContent matches the text-node walker used to rebuild DOM ranges.
+  return container.textContent || "";
+}
+
+function findBestAnchorStart(text: string, anchor: TextAnchor): number {
+  const candidates: number[] = [];
+  let cursor = text.indexOf(anchor.exact);
+  while (cursor !== -1) {
+    candidates.push(cursor);
+    cursor = text.indexOf(anchor.exact, cursor + anchor.exact.length);
+  }
+
+  if (candidates.length === 0) {
+    const contextualNeedle = `${anchor.prefix}${anchor.exact}${anchor.suffix}`;
+    const contextualStart = text.indexOf(contextualNeedle);
+    return contextualStart === -1 ? -1 : contextualStart + anchor.prefix.length;
+  }
+
+  return candidates
+    .map((start) => ({
+      start,
+      score:
+        Math.abs(start - anchor.startOffset) +
+        (text.slice(Math.max(0, start - anchor.prefix.length), start) === anchor.prefix ? -50 : 0) +
+        (text.slice(start + anchor.exact.length, start + anchor.exact.length + anchor.suffix.length) === anchor.suffix ? -50 : 0)
+    }))
+    .sort((left, right) => left.score - right.score)[0].start;
 }
 
 function getTextOffset(container: HTMLElement, node: Node, offset: number, fallback: number): number {
@@ -96,6 +111,11 @@ function rangeFromOffsets(container: HTMLElement, startOffset: number, endOffset
 
     total = nextTotal;
     current = walker.nextNode();
+  }
+
+  if (startSet) {
+    range.setEnd(container, container.childNodes.length);
+    return range;
   }
 
   return null;

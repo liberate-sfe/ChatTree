@@ -23,12 +23,16 @@ if (provider) {
   const mount = document.createElement("div");
   shadow.append(mount);
 
-  const observer = observeConversation(provider, (messages) => {
-    useChatTreeStore.getState().ingestMessages(provider, window.location.href, messages);
+  let observer: MutationObserver | null = null;
+  void useChatTreeStore.getState().hydrateConversation(provider, window.location.href).finally(() => {
     reapplyHighlights(Object.values(useChatTreeStore.getState().envelope.highlights), findMessageElement);
+    observer = observeConversation(provider, (messages) => {
+      useChatTreeStore.getState().ingestMessages(provider, window.location.href, messages);
+      reapplyHighlights(Object.values(useChatTreeStore.getState().envelope.highlights), findMessageElement);
+    });
   });
 
-  window.addEventListener("beforeunload", () => observer.disconnect());
+  window.addEventListener("beforeunload", () => observer?.disconnect());
 
   createRoot(mount).render(
     <React.StrictMode>

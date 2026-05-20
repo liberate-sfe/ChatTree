@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { KeyRound, Lock, Save } from "lucide-react";
+import { KeyRound, Lock, Save, Trash2 } from "lucide-react";
 import "../styles/tailwind.css";
 import { encryptString } from "../shared/crypto";
 import { DEFAULT_SETTINGS, type AppSettings, type LlmProvider } from "../shared/schema";
@@ -55,6 +55,23 @@ function OptionsApp() {
     setSettings(nextSettings);
     setApiKeyDraft("");
     setStatus("Saved locally. ChatTree never uses chrome.storage.sync.");
+  };
+
+  const deleteActiveKey = async () => {
+    const nextSettings = {
+      ...settings,
+      providers: {
+        ...settings.providers,
+        [activeProvider]: {
+          ...settings.providers[activeProvider],
+          encryptedApiKey: null
+        }
+      }
+    };
+    await saveSettings(nextSettings);
+    setSettings(nextSettings);
+    setApiKeyDraft("");
+    setStatus(`${activeProvider} API key deleted from chrome.storage.local.`);
   };
 
   return (
@@ -118,6 +135,14 @@ function OptionsApp() {
           >
             <Save size={16} />
             Save settings
+          </button>
+          <button
+            type="button"
+            className="ml-2 inline-flex items-center gap-2 rounded-md border border-chattree-line px-4 py-2 text-sm font-semibold"
+            onClick={() => void deleteActiveKey()}
+          >
+            <Trash2 size={16} />
+            Delete key
           </button>
         </section>
 

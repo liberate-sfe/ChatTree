@@ -84,6 +84,16 @@ export async function saveConversationEnvelope(envelope: ConversationEnvelope): 
       db.branchSuggestions
     ],
     async () => {
+      await Promise.all([
+        db.nodes.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.summaries.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.messages.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.highlights.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.notes.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.tags.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.taggedEntities.where("conversationId").equals(nextEnvelope.conversation.id).delete(),
+        db.branchSuggestions.where("conversationId").equals(nextEnvelope.conversation.id).delete()
+      ]);
       await db.conversations.put({ ...nextEnvelope.conversation, storageBackend: "indexeddb" });
       await db.trees.put(nextEnvelope.tree);
       await db.nodes.bulkPut(Object.values(nextEnvelope.nodes));

@@ -3,6 +3,7 @@ import type { ExtractedMessage, MessageRole, ProviderSite } from "../shared/sche
 interface SiteSelectorConfig {
   provider: ProviderSite;
   messageSelectors: string[];
+  contentSelectors: string[];
   userHints: string[];
   assistantHints: string[];
 }
@@ -16,6 +17,7 @@ const SITE_CONFIGS: Record<ProviderSite, SiteSelectorConfig> = {
       "article[data-testid*='conversation']",
       "main article"
     ],
+    contentSelectors: ["[data-message-author-role] .markdown", ".markdown", ".whitespace-pre-wrap", "[data-message-author-role]"],
     userHints: ["[data-message-author-role='user']", "[data-testid*='user']", ".whitespace-pre-wrap"],
     assistantHints: ["[data-message-author-role='assistant']", "[data-testid*='assistant']", ".markdown"]
   },
@@ -27,6 +29,7 @@ const SITE_CONFIGS: Record<ProviderSite, SiteSelectorConfig> = {
       "[data-is-streaming]",
       "main [class*='message']"
     ],
+    contentSelectors: ["[data-testid='user-message']", "[data-testid='assistant-message']", ".font-claude-message", "[class*='message']"],
     userHints: ["[data-testid='user-message']", "[aria-label*='Human']", "[class*='user']"],
     assistantHints: ["[data-testid='assistant-message']", "[aria-label*='Claude']", "[class*='assistant']"]
   },
@@ -40,6 +43,7 @@ const SITE_CONFIGS: Record<ProviderSite, SiteSelectorConfig> = {
       "main [class*='query']",
       "main [class*='response']"
     ],
+    contentSelectors: ["user-query", "model-response", "[class*='query-text']", "[class*='response-content']"],
     userHints: ["user-query", "[data-test-id*='user']", "[class*='user']"],
     assistantHints: ["model-response", "[data-test-id*='response']", "[class*='model']"]
   }
@@ -59,8 +63,12 @@ export function detectProvider(hostname = window.location.hostname): ProviderSit
 }
 
 export function extractMessages(provider: ProviderSite): ExtractedMessage[] {
+  return extractMessagesFromRoot(provider, document);
+}
+
+export function extractMessagesFromRoot(provider: ProviderSite, root: ParentNode): ExtractedMessage[] {
   const config = SITE_CONFIGS[provider];
-  const elements = uniqueElements(config.messageSelectors.flatMap((selector) => [...document.querySelectorAll(selector)]));
+  const elements = uniqueElements(config.messageSelectors.flatMap((selector) => [...root.querySelectorAll(selector)]));
 
   return elements
     .map((element, ordinal) => normalizeMessageElement(config, element as HTMLElement, ordinal))
@@ -105,7 +113,7 @@ function normalizeMessageElement(
   element: HTMLElement,
   ordinal: number
 ): ExtractedMessage | null {
-  const content = (element.innerText || element.textContent || "").trim();
+  const content = getMessageContent(config, element);
   if (!content) {
     return null;
   }
@@ -140,8 +148,27 @@ function inferRole(config: SiteSelectorConfig, element: HTMLElement, ordinal: nu
     return "assistant";
   }
 
+  const label = `${element.getAttribute("aria-label") ?? ""} ${element.className ?? ""}`.toLowerCase();
+  if (/\b(user|human|you)\b/.test(label)) {
+    return "user";
+  }
+  if (/\b(assistant|chatgpt|claude|gemini|model)\b/.test(label)) {
+    return "assistant";
+  }
+
   // Last fallback: most hosted chats alternate user then assistant.
   return ordinal % 2 === 0 ? "user" : "assistant";
+}
+
+function getMessageContent(config: SiteSelectorConfig, element: HTMLElement): string {
+  for (const selector of config.contentSelectors) {
+    const contentElement = element.matches(selector) ? element : element.querySelector<HTMLElement>(selector);
+    const text = (contentElement?.innerText || contentElement?.textContent || "").trim();
+    if (text) {
+      return text;
+    }
+  }
+  return (element.innerText || element.textContent || "").trim();
 }
 
 function inferTimestamp(element: HTMLElement): string | null {
@@ -167,12 +194,18 @@ function matchesAny(element: HTMLElement, selectors: string[]): boolean {
 
 function uniqueElements(elements: Element[]): Element[] {
   const seen = new Set<Element>();
-  return elements.filter((element) => {
+  const unique = elements.filter((element) => {
     if (seen.has(element) || element.closest("#chattree-root")) {
       return false;
     }
     seen.add(element);
     return true;
+  });
+
+  return unique.filter((element) => {
+    const nested = unique.some((candidate) => candidate !== element && element.contains(candidate));
+    const hasStableMessageId = element.hasAttribute("data-message-id") || element.hasAttribute("data-message-author-role");
+    return !nested || hasStableMessageId;
   });
 }
 
