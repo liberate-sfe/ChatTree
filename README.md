@@ -24,6 +24,23 @@ A PhD student reads a foundational ecotoxicology paper with an AI assistant. The
 4. Enable Developer mode.
 5. Click Load unpacked and select the generated `dist/` directory.
 
+## Chrome Web Store Package
+
+Generate a Chrome Web Store upload zip with:
+
+```bash
+pnpm package:chrome
+```
+
+The package script runs a production build, validates the generated MV3 manifest, and writes the upload artifact to `release/chattree-chrome-v0.1.0.zip`.
+
+Store submission materials are in `store/`:
+
+- `store/chrome-web-store-listing.md` — bilingual listing copy, screenshot plan, and reviewer test instructions.
+- `store/privacy-policy.md` — bilingual privacy policy draft that should be published at a stable public URL before submission.
+- `store/permission-justification.md` — permission and host access explanations for the Developer Dashboard.
+- `store/release-checklist.md` — local validation and submission checklist.
+
 ## Configuration
 
 1. Open the ChatTree options page.
@@ -81,6 +98,15 @@ ChatTree/
   tailwind.config.ts
   tsconfig.json
   vite.config.ts
+  scripts/
+    generate-icons.mjs
+    package-extension.mjs
+    smoke-extension.mjs
+  store/
+    chrome-web-store-listing.md
+    permission-justification.md
+    privacy-policy.md
+    release-checklist.md
   src/
     background/index.ts
     content/domParser.ts
@@ -107,7 +133,7 @@ ChatTree/
 - Add semantic search via embeddings.
 - Add multi-model switching.
 - Port to Firefox.
-- Prepare Chrome Web Store packaging.
+- Add production screenshots and publish the privacy policy URL for Chrome Web Store review.
 - Add optional sync across devices.
 
 ## License

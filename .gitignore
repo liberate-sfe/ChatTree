@@ -1,5 +1,6 @@
 node_modules/
 dist/
+release/
 .crx/
 .DS_Store
 *.log

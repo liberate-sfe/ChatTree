@@ -24,6 +24,23 @@ ChatTree 是一个 Manifest V3 Chrome 扩展，会在 ChatGPT、Claude.ai 和 Ge
 4. 开启开发者模式。
 5. 点击“加载已解压的扩展程序”，选择生成的 `dist/` 目录。
 
+## Chrome Web Store 打包
+
+用下面的命令生成可上传到 Chrome Web Store 的 zip：
+
+```bash
+pnpm package:chrome
+```
+
+打包脚本会先运行 production build，再校验生成后的 MV3 manifest，最后把上传文件写到 `release/chattree-chrome-v0.1.0.zip`。
+
+商店提交材料在 `store/` 目录：
+
+- `store/chrome-web-store-listing.md`：中英双语商店文案、截图计划和审核测试说明。
+- `store/privacy-policy.md`：中英双语隐私政策草稿，提交前需要发布到稳定公开 URL。
+- `store/permission-justification.md`：Developer Dashboard 里可使用的权限和 host access 说明。
+- `store/release-checklist.md`：本地检查和提交清单。
+
 ## 配置
 
 1. 打开 ChatTree options 页面。
@@ -81,6 +98,15 @@ ChatTree/
   tailwind.config.ts
   tsconfig.json
   vite.config.ts
+  scripts/
+    generate-icons.mjs
+    package-extension.mjs
+    smoke-extension.mjs
+  store/
+    chrome-web-store-listing.md
+    permission-justification.md
+    privacy-policy.md
+    release-checklist.md
   src/
     background/index.ts
     content/domParser.ts
@@ -107,7 +133,7 @@ ChatTree/
 - 增加基于 embeddings 的语义搜索。
 - 增加多模型切换。
 - 移植到 Firefox。
-- 准备 Chrome Web Store 打包。
+- 为 Chrome Web Store 审核补充正式截图，并发布隐私政策 URL。
 - 增加可选的跨设备同步。
 
 ## 许可证
