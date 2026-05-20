@@ -56,6 +56,17 @@ pnpm test
 pnpm build
 ```
 
+如果要用已安装的 Chromium 浏览器做扩展 smoke test：
+
+```powershell
+$env:CHROME_PATH='C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
+$env:SMOKE_HEADLESS='0'
+$env:SMOKE_URL='https://chatgpt.com/'
+pnpm smoke:extension
+```
+
+把 `SMOKE_URL` 改成 `https://claude.ai/` 或 `https://gemini.google.com/` 可以测试对应 adapter。
+
 ## 项目结构
 
 ```text
