@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">ChatTree screenshot placeholder</title>
+  <desc id="desc">Placeholder showing a chat page with a right-side tree and notes sidebar.</desc>
+  <rect width="1200" height="720" fill="#f5f7f6"/>
+  <rect x="40" y="40" width="780" height="640" rx="8" fill="#ffffff" stroke="#d6dedb"/>
+  <rect x="860" y="0" width="340" height="720" fill="#fbfcfa" stroke="#d6dedb"/>
+  <text x="80" y="96" font-family="Arial, sans-serif" font-size="28" fill="#17201f">AI conversation</text>
+  <rect x="80" y="140" width="560" height="62" rx="8" fill="#edf7f4"/>
+  <rect x="180" y="230" width="560" height="92" rx="8" fill="#f8faf9"/>
+  <rect x="80" y="350" width="500" height="62" rx="8" fill="#edf7f4"/>
+  <rect x="180" y="440" width="590" height="112" rx="8" fill="#f8faf9"/>
+  <text x="890" y="48" font-family="Arial, sans-serif" font-size="24" font-weight="700" fill="#17201f">ChatTree</text>
+  <text x="890" y="90" font-family="Arial, sans-serif" font-size="14" fill="#0f8f7e">Tree / Notes / Settings</text>
+  <circle cx="910" cy="150" r="6" fill="#0f8f7e"/>
+  <text x="930" y="156" font-family="Arial, sans-serif" font-size="16" fill="#17201f">Paper + English</text>
+  <line x1="910" y1="170" x2="910" y2="330" stroke="#d6dedb" stroke-dasharray="4 4"/>
+  <circle cx="940" cy="210" r="6" fill="#7c4dff"/>
+  <text x="960" y="216" font-family="Arial, sans-serif" font-size="15" fill="#17201f">Paper walkthrough</text>
+  <circle cx="940" cy="260" r="6" fill="#facc15"/>
+  <text x="960" y="266" font-family="Arial, sans-serif" font-size="15" fill="#17201f">English vocabulary</text>
+  <circle cx="940" cy="310" r="6" fill="#60a5fa"/>
+  <text x="960" y="316" font-family="Arial, sans-serif" font-size="15" fill="#17201f">Mechanism why-chain</text>
+  <rect x="890" y="390" width="270" height="130" rx="8" fill="#ffffff" stroke="#d6dedb"/>
+  <text x="910" y="424" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#17201f">Notes</text>
+  <text x="910" y="456" font-family="Arial, sans-serif" font-size="13" fill="#5f6f6d">vocabulary • grammar • mechanism</text>
+  <text x="910" y="492" font-family="Arial, sans-serif" font-size="13" fill="#17201f">"fewer vs less" grammar tip</text>
+</svg>

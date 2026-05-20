@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.crx/
+.DS_Store
+*.log
+pnpm-debug.log*
+.env
+.env.*
+!.env.example
