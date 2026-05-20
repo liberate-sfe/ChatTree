@@ -87,9 +87,12 @@ try {
       assistant.setAttribute("data-testid", "assistant-message");
       const userTwo = text(document.createElement("div"), "What does fewer mean in English?");
       userTwo.setAttribute("data-testid", "user-message");
+      const userThree = text(document.createElement("div"), "Why does less estrogen reduce vitellogenin?");
+      userThree.setAttribute("data-testid", "user-message");
       add(userOne);
       add(assistant);
       add(userTwo);
+      add(userThree);
       return;
     }
 
@@ -97,6 +100,7 @@ try {
       add(text(document.createElement("user-query"), "Help me read this paper introduction."));
       add(text(document.createElement("model-response"), "This paper walkthrough explains the introduction."));
       add(text(document.createElement("user-query"), "What does fewer mean in English?"));
+      add(text(document.createElement("user-query"), "Why does less estrogen reduce vitellogenin?"));
       return;
     }
 
@@ -112,9 +116,14 @@ try {
     userTwo.dataset.messageId = "smoke-user-2";
     userTwo.dataset.messageAuthorRole = "user";
     userTwo.appendChild(text(document.createElement("div"), "What does fewer mean in English?"));
+    const userThree = document.createElement("article");
+    userThree.dataset.messageId = "smoke-user-3";
+    userThree.dataset.messageAuthorRole = "user";
+    userThree.appendChild(text(document.createElement("div"), "Why does less estrogen reduce vitellogenin?"));
     add(userOne);
     add(assistant);
     add(userTwo);
+    add(userThree);
   });
   await wait(1000);
 
@@ -132,6 +141,27 @@ try {
     throw new Error(`Sidebar tabs missing: ${JSON.stringify(sidebarResult)}`);
   }
 
+  await evaluate(client, () => {
+    const root = document.querySelector("#chattree-root")?.shadowRoot;
+    const analyzeButton = root?.querySelector("button[aria-label='Analyze conversation']");
+    analyzeButton?.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true }));
+    return Boolean(analyzeButton);
+  });
+  await wait(1500);
+
+  const analysisResult = await evaluate(client, () => {
+    const text = document.querySelector("#chattree-root")?.shadowRoot?.textContent ?? "";
+    return {
+      hasPaper: text.includes("Paper"),
+      hasEnglish: text.includes("English"),
+      hasWhy: text.includes("Why-chain")
+    };
+  });
+
+  if (!analysisResult.hasPaper || !analysisResult.hasEnglish || !analysisResult.hasWhy) {
+    throw new Error(`Whole-conversation analysis did not create expected branches: ${JSON.stringify(analysisResult)}`);
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -144,6 +174,8 @@ try {
           settings: sidebarResult.hasSettings
         },
         parsedSmokeMessages: sidebarResult.hasInjectedMessage
+        ,
+        analysisBranches: analysisResult
       },
       null,
       2

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import {
   applyBranchSuggestion,
+  applyConversationAnalysis,
   buildEnvelopeFromMessages,
   createConversationId,
   ensureDefaultTags,
@@ -17,7 +18,7 @@ import type {
   Tag,
   TaggedEntity
 } from "../shared/schema";
-import type { GeneratedSummary } from "../shared/messages";
+import type { ConversationAnalysis, GeneratedSummary } from "../shared/messages";
 import { loadConversationEnvelope, saveConversationEnvelope } from "../shared/storage";
 import { mockEnvelope } from "./mockData";
 
@@ -41,6 +42,7 @@ interface ChatTreeState {
   addNote: (note: Omit<Note, "id" | "createdAt" | "updatedAt">, tagIds?: string[]) => void;
   addTag: (label: string) => void;
   tagEntity: (entity: Omit<TaggedEntity, "id" | "createdAt" | "conversationId">) => void;
+  applyConversationAnalysis: (analysis: ConversationAnalysis) => void;
   applyGeneratedSummary: (summary: GeneratedSummary, nodeId: string | null, kind: Summary["kind"]) => void;
   setSelectedTag: (tagId: string | null) => void;
   persist: () => Promise<void>;
@@ -232,6 +234,15 @@ export const useChatTreeStore = create<ChatTreeState>((set, get) => ({
         }
       };
     });
+    void get().persist();
+  },
+
+  applyConversationAnalysis(analysis) {
+    set((state) => ({
+      envelope: applyConversationAnalysis(state.envelope, analysis),
+      selectedNodeId: state.envelope.tree.rootNodeId,
+      activeTab: "tree"
+    }));
     void get().persist();
   },
 

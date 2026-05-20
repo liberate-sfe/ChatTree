@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { ChatTreeNode, HighlightColor, Note, ProviderSite } from "../shared/schema";
-import { RUNTIME_MESSAGES, type RuntimeResponse, type GeneratedSummary } from "../shared/messages";
+import { RUNTIME_MESSAGES, type ConversationAnalysis, type RuntimeResponse } from "../shared/messages";
 import { exportTreeAsJson, exportTreeAsMarkdown } from "../shared/export";
 import { createTextAnchor, getCurrentSelectionRange } from "../content/selectionAnchors";
 import { reapplyHighlights } from "../content/highlightRenderer";
@@ -69,7 +69,7 @@ export function SidebarApp({ provider, onJumpToMessage, getMessageElement }: Sid
             >
               <NotebookTabs size={17} />
             </button>
-            <ManualSummaryButton />
+            <AnalyzeConversationButton />
           </div>
         </header>
 
@@ -460,27 +460,25 @@ function SettingsTab() {
   );
 }
 
-function ManualSummaryButton() {
+function AnalyzeConversationButton() {
   const envelope = useChatTreeStore((state) => state.envelope);
-  const applyGeneratedSummary = useChatTreeStore((state) => state.applyGeneratedSummary);
+  const applyConversationAnalysis = useChatTreeStore((state) => state.applyConversationAnalysis);
   const [busy, setBusy] = useState(false);
 
-  const requestSummary = async () => {
+  const requestAnalysis = async () => {
     setBusy(true);
     try {
       const response = await chrome.runtime.sendMessage({
-        type: RUNTIME_MESSAGES.SUMMARIZE,
+        type: RUNTIME_MESSAGES.ANALYZE_CONVERSATION,
         payload: {
           conversationId: envelope.conversation.id,
-          nodeId: envelope.tree.rootNodeId,
-          kind: "overview",
           messages: Object.values(envelope.messages)
         }
-      }) as RuntimeResponse<GeneratedSummary>;
+      }) as RuntimeResponse<ConversationAnalysis>;
       if (!response.ok) {
-        window.alert(response.error ?? "Summary failed");
+        window.alert(response.error ?? "Conversation analysis failed");
       } else if (response.data) {
-        applyGeneratedSummary(response.data, envelope.tree.rootNodeId, "overview");
+        applyConversationAnalysis(response.data);
       }
     } finally {
       setBusy(false);
@@ -490,10 +488,10 @@ function ManualSummaryButton() {
   return (
     <button
       type="button"
-      aria-label="Generate summary"
+      aria-label="Analyze conversation"
       className="grid h-8 w-8 place-items-center rounded-md text-chattree-muted hover:bg-white hover:text-chattree-ink disabled:opacity-50"
       disabled={busy}
-      onClick={() => void requestSummary()}
+      onClick={() => void requestAnalysis()}
     >
       <Sparkles size={17} />
     </button>

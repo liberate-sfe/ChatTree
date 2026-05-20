@@ -1,4 +1,17 @@
-import { CHAT_TREE_SCHEMA_VERSION, type BranchSuggestion, type ChatTreeNode, type ConversationEnvelope, type ExtractedMessage, type HighlightColor, type ProviderSite, type Tag } from "./schema";
+import type { ConversationAnalysis } from "./messages";
+import { titleWithinLimit } from "./conversationAnalysis";
+import {
+  CHAT_TREE_SCHEMA_VERSION,
+  type BranchSuggestion,
+  type ChatTreeNode,
+  type ConversationEnvelope,
+  type ExtractedMessage,
+  type HighlightColor,
+  type ProviderSite,
+  type Summary,
+  type Tag,
+  type TaggedEntity
+} from "./schema";
 
 export function createConversationId(provider: ProviderSite, url: string): string {
   const parsed = new URL(url);
@@ -239,6 +252,144 @@ export function rejectBranchSuggestion(envelope: ConversationEnvelope, suggestio
   };
 }
 
+export function applyConversationAnalysis(envelope: ConversationEnvelope, analysis: ConversationAnalysis): ConversationEnvelope {
+  const now = new Date().toISOString();
+  const rootId = envelope.tree.rootNodeId;
+  const root = envelope.nodes[rootId];
+  const nodes: Record<string, ChatTreeNode> = Object.fromEntries(
+    Object.entries(envelope.nodes).map(([id, node]) => [
+      id,
+      {
+        ...node,
+        childIds: id === rootId ? [] : node.childIds.filter((childId) => !childId.startsWith("theme:")),
+        updatedAt: now
+      }
+    ])
+  );
+
+  const summaries: Record<string, Summary> = {
+    ...envelope.summaries,
+    [`summary:analysis:${rootId}`]: {
+      id: `summary:analysis:${rootId}`,
+      conversationId: envelope.conversation.id,
+      nodeId: rootId,
+      kind: "overview",
+      title: titleWithinLimit(analysis.overviewTitle),
+      body: analysis.overviewSummary,
+      sourceMessageIds: Object.keys(envelope.messages),
+      provider: analysis.provider === "local" ? "openai" : analysis.provider,
+      model: analysis.model,
+      status: "ready",
+      generatedAt: now,
+      error: null
+    }
+  };
+
+  const tags = { ...envelope.tags };
+  const taggedEntities: TaggedEntity[] = [...envelope.taggedEntities];
+  const assignedMessageNodeIds = new Set<string>();
+  const themeNodeIds: string[] = [];
+
+  for (const [themeIndex, theme] of analysis.themes.entries()) {
+    const themeNodeId = `theme:${sanitizeId(theme.id || `${envelope.conversation.id}:${themeIndex}`)}`;
+    const messageNodeIds = theme.messageIds
+      .map(nodeIdForMessage)
+      .filter((nodeId) => Boolean(nodes[nodeId]));
+    if (messageNodeIds.length === 0) {
+      continue;
+    }
+
+    const summaryId = `summary:analysis:${themeNodeId}`;
+    const firstMessageId = theme.messageIds[0] ?? null;
+    themeNodeIds.push(themeNodeId);
+    summaries[summaryId] = {
+      id: summaryId,
+      conversationId: envelope.conversation.id,
+      nodeId: themeNodeId,
+      kind: "node",
+      title: titleWithinLimit(theme.title),
+      body: theme.summary,
+      sourceMessageIds: theme.messageIds,
+      provider: analysis.provider === "local" ? "openai" : analysis.provider,
+      model: analysis.model,
+      status: "ready",
+      generatedAt: now,
+      error: null
+    };
+
+    nodes[themeNodeId] = {
+      id: themeNodeId,
+      conversationId: envelope.conversation.id,
+      messageId: firstMessageId,
+      parentId: rootId,
+      role: "system",
+      title: titleWithinLimit(theme.title),
+      contentPreview: theme.summary,
+      summaryId,
+      childIds: messageNodeIds,
+      assistantReplyIds: [],
+      isBranchPoint: true,
+      branchSourceReplyId: firstMessageId,
+      isPinned: false,
+      collapsed: false,
+      ordinal: themeIndex,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    for (const [messageIndex, messageNodeId] of messageNodeIds.entries()) {
+      const previousNodeId = theme.title.toLowerCase().includes("why") && messageIndex > 0 ? messageNodeIds[messageIndex - 1] : themeNodeId;
+      assignedMessageNodeIds.add(messageNodeId);
+      nodes[messageNodeId] = {
+        ...nodes[messageNodeId],
+        parentId: previousNodeId,
+        childIds: nodes[messageNodeId].childIds.filter((childId) => messageNodeIds.includes(childId)),
+        isBranchPoint: nodes[messageNodeId].isBranchPoint || theme.title.toLowerCase().includes("why"),
+        updatedAt: now
+      };
+      if (previousNodeId !== themeNodeId) {
+        nodes[previousNodeId] = {
+          ...nodes[previousNodeId],
+          childIds: [...new Set([...nodes[previousNodeId].childIds, messageNodeId])],
+          updatedAt: now
+        };
+      }
+    }
+
+    for (const label of theme.tagLabels) {
+      const tagId = ensureTag(tags, envelope.conversation.id, label, now);
+      taggedEntities.push(makeTaggedEntity(envelope.conversation.id, tagId, "node", themeNodeId, now));
+    }
+  }
+
+  const unassigned = Object.values(envelope.nodes)
+    .filter((node) => node.id !== rootId && node.messageId && !assignedMessageNodeIds.has(node.id))
+    .map((node) => node.id);
+
+  nodes[rootId] = {
+    ...root,
+    title: titleWithinLimit(analysis.overviewTitle),
+    contentPreview: analysis.overviewSummary,
+    summaryId: `summary:analysis:${rootId}`,
+    childIds: [...themeNodeIds, ...unassigned],
+    updatedAt: now
+  };
+
+  return {
+    ...envelope,
+    tree: {
+      ...envelope.tree,
+      overviewSummaryId: `summary:analysis:${rootId}`,
+      nodeIds: Object.keys(nodes),
+      updatedAt: now
+    },
+    nodes,
+    summaries,
+    tags,
+    taggedEntities: dedupeTaggedEntities(taggedEntities)
+  };
+}
+
 function collectAssistantReplyIds(messages: ExtractedMessage[], userOrdinal: number): string[] {
   const replies: string[] = [];
   for (const message of messages.filter((item) => item.ordinal > userOrdinal)) {
@@ -277,4 +428,56 @@ function inferTheme(content: string): "paper" | "vocabulary" | "grammar" | "mech
     return "paper";
   }
   return "general";
+}
+
+function sanitizeId(value: string): string {
+  return value.replace(/[^a-zA-Z0-9:-]+/g, "-");
+}
+
+function ensureTag(tags: Record<string, Tag>, conversationId: string, label: string, now: string): string {
+  const normalized = label.trim().toLowerCase();
+  const existing = Object.values(tags).find((tag) => tag.label === normalized);
+  if (existing) {
+    return existing.id;
+  }
+
+  const id = `tag:${normalized.replace(/[^a-z0-9-]+/g, "-")}`;
+  tags[id] = {
+    id,
+    conversationId,
+    label: normalized,
+    color: normalized.includes("mechanism") ? "blue" : normalized.includes("grammar") ? "green" : "yellow",
+    createdAt: now,
+    updatedAt: now
+  };
+  return id;
+}
+
+function makeTaggedEntity(
+  conversationId: string,
+  tagId: string,
+  entityType: TaggedEntity["entityType"],
+  entityId: string,
+  createdAt: string
+): TaggedEntity {
+  return {
+    id: `tagged:${tagId}:${entityType}:${entityId}`,
+    conversationId,
+    tagId,
+    entityType,
+    entityId,
+    createdAt
+  };
+}
+
+function dedupeTaggedEntities(items: TaggedEntity[]): TaggedEntity[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.tagId}:${item.entityType}:${item.entityId}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }

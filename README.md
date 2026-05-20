@@ -40,6 +40,7 @@ API keys are encrypted with AES-GCM and stored in `chrome.storage.local`. ChatTr
 - Per-site DOM adapter tests for ChatGPT and Gemini-style markup.
 - IndexedDB restore flow that reloads saved tree, notes, highlights, tags, and summaries for the active conversation.
 - Retroactive branch split suggestions with accept/reject controls.
+- Whole-conversation Analyze action that reads the complete transcript and rewrites the tree into activity branches, instead of mechanically adding one node per message.
 - LLM-generated short titles and 3-5 sentence summaries through the user's own API key.
 - Summary responses are written back to the root or selected node.
 - Notes and highlights with robust text anchoring based on selected text, offsets, and nearby context.
@@ -65,7 +66,7 @@ $env:SMOKE_URL='https://chatgpt.com/'
 pnpm smoke:extension
 ```
 
-Set `SMOKE_URL` to `https://claude.ai/` or `https://gemini.google.com/` to test those adapters.
+The smoke test injects mixed paper / English / mechanism fixture messages, clicks Analyze, and verifies that the sidebar creates the expected activity branches. Set `SMOKE_URL` to `https://claude.ai/` or `https://gemini.google.com/` to test those adapters.
 
 ## Project Structure
 

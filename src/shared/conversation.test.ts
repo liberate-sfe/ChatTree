@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyBranchSuggestion, buildEnvelopeFromMessages, createConversationId, suggestBranchSplits } from "./conversation";
+import { analyzeConversationLocally } from "./conversationAnalysis";
+import { applyBranchSuggestion, applyConversationAnalysis, buildEnvelopeFromMessages, createConversationId, suggestBranchSplits } from "./conversation";
 import type { ExtractedMessage } from "./schema";
 
 describe("conversation helpers", () => {
@@ -33,6 +34,27 @@ describe("conversation helpers", () => {
 
     expect(next.nodes["node:m3"].parentId).toBe("node:m1");
     expect(next.branchSuggestions[0].accepted).toBe(true);
+  });
+
+  it("applies whole-conversation analysis as theme branches instead of a flat message list", () => {
+    const messages = [
+      message("m1", "user", "Help me read this ecotoxicology paper introduction", 0),
+      message("m2", "assistant", "The paper introduces endocrine disruption in aquatic organisms.", 1),
+      message("m3", "user", "What does fewer mean in English?", 2),
+      message("m4", "assistant", "Use fewer with countable nouns and less with uncountable quantities.", 3),
+      message("m5", "user", "Why does less estrogen mean less vitellogenin?", 4),
+      message("m6", "assistant", "Estrogen signaling regulates vitellogenin production.", 5)
+    ];
+    const envelope = buildEnvelopeFromMessages("chatgpt", "https://chatgpt.com/c/paper", "Paper", messages, null);
+    const analysis = analyzeConversationLocally(envelope.conversation.id, messages);
+    const next = applyConversationAnalysis(envelope, analysis);
+    const rootChildren = next.nodes[next.tree.rootNodeId].childIds;
+
+    expect(rootChildren.some((nodeId) => next.nodes[nodeId].title === "Paper walk")).toBe(true);
+    expect(rootChildren.some((nodeId) => next.nodes[nodeId].title === "English")).toBe(true);
+    expect(rootChildren.some((nodeId) => next.nodes[nodeId].title === "Why-chain")).toBe(true);
+    expect(next.nodes["node:m3"].parentId).toContain("theme:");
+    expect(next.nodes[next.tree.rootNodeId].contentPreview).toContain("full transcript");
   });
 });
 
