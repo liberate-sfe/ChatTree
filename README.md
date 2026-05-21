@@ -34,6 +34,12 @@ pnpm package:chrome
 
 The package script runs a production build, validates the generated MV3 manifest, and writes the upload artifact to `release/chattree-chrome-v0.1.0.zip`.
 
+If you already have a Chrome Web Store item id and OAuth credentials, set the `CWS_*` environment variables shown in `.env.example`, then run:
+
+```bash
+pnpm upload:chrome
+```
+
 Store submission materials are in `store/`:
 
 - `store/chrome-web-store-listing.md` — bilingual listing copy, screenshot plan, and reviewer test instructions.
@@ -101,6 +107,7 @@ ChatTree/
   scripts/
     generate-icons.mjs
     package-extension.mjs
+    upload-chrome-web-store.mjs
     smoke-extension.mjs
   store/
     chrome-web-store-listing.md

@@ -34,6 +34,12 @@ pnpm package:chrome
 
 打包脚本会先运行 production build，再校验生成后的 MV3 manifest，最后把上传文件写到 `release/chattree-chrome-v0.1.0.zip`。
 
+如果你已经有 Chrome Web Store item id 和 OAuth 凭据，先按 `.env.example` 设置 `CWS_*` 环境变量，然后运行：
+
+```bash
+pnpm upload:chrome
+```
+
 商店提交材料在 `store/` 目录：
 
 - `store/chrome-web-store-listing.md`：中英双语商店文案、截图计划和审核测试说明。
@@ -101,6 +107,7 @@ ChatTree/
   scripts/
     generate-icons.mjs
     package-extension.mjs
+    upload-chrome-web-store.mjs
     smoke-extension.mjs
   store/
     chrome-web-store-listing.md

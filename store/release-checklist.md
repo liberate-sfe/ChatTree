@@ -20,6 +20,14 @@ The upload artifact is generated at:
 release/chattree-chrome-v0.1.0.zip
 ```
 
+If you already have a Chrome Web Store item id and OAuth credentials, upload the package with:
+
+```bash
+pnpm upload:chrome
+```
+
+Use `pnpm upload:chrome -- --publish` only after the Store Listing, Privacy, Distribution, and Test Instructions tabs are complete.
+
 ### 2. Local Review
 
 - Load `dist/` from `chrome://extensions` with Developer mode enabled.
@@ -52,7 +60,19 @@ Prepare these before submission:
 4. Fill Store Listing, Privacy, Distribution, and Test Instructions.
 5. Use deferred publishing for first review if you want to inspect approval status before public release.
 
-### 5. Pre-Submit Checks
+### 5. API Upload Environment
+
+Do not commit real values. Set these in your local shell or CI secret store:
+
+```text
+CWS_PUBLISHER_ID=
+CWS_ITEM_ID=
+CWS_CLIENT_ID=
+CWS_CLIENT_SECRET=
+CWS_REFRESH_TOKEN=
+```
+
+### 6. Pre-Submit Checks
 
 - The package contains only built extension files, not `src/`, `.git/`, or `node_modules/`.
 - The manifest is Manifest V3.
@@ -79,6 +99,14 @@ pnpm package:chrome
 ```text
 release/chattree-chrome-v0.1.0.zip
 ```
+
+如果你已经有 Chrome Web Store item id 和 OAuth 凭据，可以用下面的命令上传：
+
+```bash
+pnpm upload:chrome
+```
+
+只有在 Store Listing、Privacy、Distribution 和 Test Instructions 都填写完成后，才使用 `pnpm upload:chrome -- --publish` 提交审核。
 
 ### 2. 本地检查
 
@@ -112,7 +140,19 @@ release/chattree-chrome-v0.1.0.zip
 4. 填写 Store Listing、Privacy、Distribution 和 Test Instructions。
 5. 第一次审核可选择 deferred publishing，便于通过审核后再手动公开发布。
 
-### 5. 提交前检查
+### 5. API 上传环境变量
+
+不要把真实值提交到 git。请在本地 shell 或 CI secret store 中设置：
+
+```text
+CWS_PUBLISHER_ID=
+CWS_ITEM_ID=
+CWS_CLIENT_ID=
+CWS_CLIENT_SECRET=
+CWS_REFRESH_TOKEN=
+```
+
+### 6. 提交前检查
 
 - zip 里只有构建后的扩展文件，不包含 `src/`、`.git/` 或 `node_modules/`。
 - manifest 是 Manifest V3。

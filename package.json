@@ -9,6 +9,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "package:chrome": "pnpm build && node scripts/package-extension.mjs",
+    "upload:chrome": "node scripts/upload-chrome-web-store.mjs",
     "preview": "vite preview",
     "test": "vitest run",
     "smoke:extension": "node scripts/smoke-extension.mjs"
